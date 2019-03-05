@@ -28,18 +28,16 @@ class Train(object):
         implements learning rate decay easily
         '''
         # batch size is assigned to None
-        self.image_placeholder = tf.placeholder(dtype=tf.float32,
-                                                shape=[None, IMG_HEIGHT,
-                                                        IMG_WIDTH, IMG_DEPTH])
-        self.label_placeholder = tf.placeholder(dtype=tf.int32, shape=[None])
+        self.image_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, IMG_HEIGHT, IMG_WIDTH, IMG_DEPTH])
+        self.label_placeholder = tf.placeholder(dtype=tf.int32,   shape=[None])
 
-        self.vali_image_placeholder = tf.placeholder(dtype=tf.float32, shape=[FLAGS.validation_batch_size,
-                                                                IMG_HEIGHT, IMG_WIDTH, IMG_DEPTH])
-        self.vali_label_placeholder = tf.placeholder(dtype=tf.int32, shape=[FLAGS.validation_batch_size])
+        self.vali_image_placeholder = tf.placeholder(dtype=tf.float32, shape=[FLAGS.validation_batch_size, IMG_HEIGHT, IMG_WIDTH, IMG_DEPTH])
+        self.vali_label_placeholder = tf.placeholder(dtype=tf.int32,   shape=[FLAGS.validation_batch_size])
+
+        self.flexi_image_placeholder = tf.placeholder(dtype=tf.float32, shape=[None, IMG_HEIGHT, IMG_WIDTH, IMG_DEPTH])
+        self.flexi_label_placeholder = tf.placeholder(dtype=tf.int32,   shape=[None])
 
         self.lr_placeholder = tf.placeholder(dtype=tf.float32, shape=[])
-
-
 
     def build_train_validation_graph(self):
         '''
@@ -52,8 +50,9 @@ class Train(object):
         # Logits of training data and valiation data come from the same graph. The inference of
         # validation data share all the weights with train data. This is implemented by passing
         # reuse=True to the variable scopes of train graph
-        logits = inference(self.image_placeholder, FLAGS.num_residual_blocks, reuse=False)
-        vali_logits = inference(self.vali_image_placeholder, FLAGS.num_residual_blocks, reuse=True)
+        logits, embedding_vector             = inference(self.image_placeholder, FLAGS.num_residual_blocks, reuse=False)
+        vali_logits, vali_embedding_vector   = inference(self.vali_image_placeholder, FLAGS.num_residual_blocks, reuse=True)
+        flexi_logits, flexi_embedding_vector = inference(self.flexi_image_placeholder, FLAGS.num_residual_blocks, reuse=True)
 
         # The following codes calculate the train loss, which is consist of the
         # softmax cross entropy and the relularization loss
@@ -77,7 +76,8 @@ class Train(object):
         self.train_op = self.train_operation_wo_top(global_step, self.full_loss)
         self.val_op = self.validation_op(validation_step, self.vali_top1_error, self.vali_loss)
 
-
+        # my hooks
+        self.embedding_op = flexi_embedding_vector
 
     def train(self):
         '''
@@ -228,7 +228,7 @@ class Train(object):
                                                         IMG_HEIGHT, IMG_WIDTH, IMG_DEPTH])
 
         # Build the test graph
-        logits = inference(self.test_image_placeholder, FLAGS.num_residual_blocks, reuse=False)
+        logits, embedding_vector = inference(self.test_image_placeholder, FLAGS.num_residual_blocks, reuse=False)
         predictions = tf.nn.softmax(logits)
 
         # Initialize a new session and restore a checkpoint
@@ -256,7 +256,7 @@ class Train(object):
             self.test_image_placeholder = tf.placeholder(dtype=tf.float32, shape=[remain_images,
                                                         IMG_HEIGHT, IMG_WIDTH, IMG_DEPTH])
             # Build the test graph
-            logits = inference(self.test_image_placeholder, FLAGS.num_residual_blocks, reuse=True)
+            logits, embedding_vector = inference(self.test_image_placeholder, FLAGS.num_residual_blocks, reuse=True)
             predictions = tf.nn.softmax(logits)
 
             test_image_batch = test_image_array[-remain_images:, ...]
