@@ -78,6 +78,7 @@ class Train(object):
 
         # my hooks
         self.embedding_op = flexi_embedding_vector
+        self.flexi_predictions = tf.nn.softmax(flexi_logits)
 
     def train(self):
         '''
@@ -210,7 +211,7 @@ class Train(object):
                 df.to_csv(train_dir + FLAGS.version + '_error.csv')
 
 
-    def test(self, test_image_array):
+    def test(self, test_image_array, return_embedding=False):
         '''
         This function is used to evaluate the test data. Please finish pre-precessing in advance
 
@@ -228,7 +229,7 @@ class Train(object):
                                                         IMG_HEIGHT, IMG_WIDTH, IMG_DEPTH])
 
         # Build the test graph
-        logits, embedding_vector = inference(self.test_image_placeholder, FLAGS.num_residual_blocks, reuse=False)
+        logits, embedding_vector = inference(self.test_image_placeholder, FLAGS.num_residual_blocks, reuse=tf.AUTO_REUSE)
         predictions = tf.nn.softmax(logits)
 
         # Initialize a new session and restore a checkpoint
@@ -239,6 +240,8 @@ class Train(object):
         print('Model restored from ', FLAGS.test_ckpt_path)
 
         prediction_array = np.array([]).reshape(-1, NUM_CLASS)
+        embedding_array  = np.array([]).reshape(-1, 64)
+
         # Test by batches
         for step in range(num_batches):
             if step % 10 == 0:
@@ -246,10 +249,11 @@ class Train(object):
             offset = step * FLAGS.test_batch_size
             test_image_batch = test_image_array[offset:offset+FLAGS.test_batch_size, ...]
 
-            batch_prediction_array = sess.run(predictions,
-                                        feed_dict={self.test_image_placeholder: test_image_batch})
+            batch_prediction_array, batch_embedding_array = \
+                sess.run([predictions, embedding_vector], feed_dict={self.test_image_placeholder: test_image_batch})
 
             prediction_array = np.concatenate((prediction_array, batch_prediction_array))
+            embedding_array  = np.concatenate((embedding_array , batch_embedding_array))
 
         # If test_batch_size is not a divisor of num_test_images
         if remain_images != 0:
@@ -261,14 +265,16 @@ class Train(object):
 
             test_image_batch = test_image_array[-remain_images:, ...]
 
-            batch_prediction_array = sess.run(predictions, feed_dict={
-                self.test_image_placeholder: test_image_batch})
+            batch_prediction_array, batch_embedding_array = \
+                sess.run([predictions, embedding_vector], feed_dict={self.test_image_placeholder: test_image_batch})
 
             prediction_array = np.concatenate((prediction_array, batch_prediction_array))
+            embedding_array  = np.concatenate((embedding_array , batch_embedding_array))
 
-        return prediction_array
-
-
+        if return_embedding:
+            return prediction_array, embedding_array
+        else:
+            return prediction_array
 
     ## Helper functions
     def loss(self, logits, labels):
